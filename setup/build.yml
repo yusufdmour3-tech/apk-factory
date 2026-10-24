@@ -1,0 +1,50 @@
+name: Build APK
+run-name: build-${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id: { required: true }
+      app_name: { required: true }
+      url: { required: true }
+      icon_url: { required: false, default: '' }
+      version_name: { required: false, default: '1.0.0' }
+      orientation: { required: false, default: 'Auto' }
+      display_mode: { required: false, default: 'Fullscreen' }
+      keep_screen_on: { required: false, default: 'false' }
+      pull_refresh: { required: false, default: 'false' }
+      splash_color: { required: false, default: '#000000' }
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.7' }
+      - name: Install ImageMagick
+        run: command -v convert || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
+      - name: Configure app
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          APP_NAME: ${{ inputs.app_name }}
+          APP_URL: ${{ inputs.url }}
+          ICON_URL: ${{ inputs.icon_url }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          ORIENTATION: ${{ inputs.orientation }}
+          DISPLAY_MODE: ${{ inputs.display_mode }}
+          KEEP_ON: ${{ inputs.keep_screen_on }}
+          PULL_REFRESH: ${{ inputs.pull_refresh }}
+          SPLASH_COLOR: ${{ inputs.splash_color }}
+        run: python3 scripts/configure.py
+      - name: Build
+        run: gradle assembleDebug --no-daemon -PappId="$APP_ID" -PverName="$VER_NAME"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk app.apk
+          gh release create "build-$REQUEST_ID" app.apk --title "build-$REQUEST_ID" --notes "Automatic build"
